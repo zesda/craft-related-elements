@@ -59,6 +59,8 @@ return [
 
 - **Removed duplication and dead code from `findOutgoingRelationships()`** — Replaced the O(n) linear scan for duplicate detection with an O(1) ID-keyed hash set. Removed the per-element `getFieldLayout()` guard call, which was unnecessary for standard element types (Entry, Category, Asset, Tag) returned by Craft's field value API.
 
+- **Moved element type pills outside anchor tags** — Repositioned the element type pill markup so it sits after the closing `<a>` tag (within the outer flex container) across all three element list sections — outgoing, nested, and incoming — improving accessibility and click-target semantics without changing the visual layout.
+
 ### Planned
 
 - **Performance optimisations** — Further profiling and query reduction across the render path.
@@ -68,5 +70,3 @@ return [
 - **Limit relations by section and entry type** — Add configuration to scope incoming/outgoing scans to specific sections or entry types, reducing unnecessary queries for entries that are only relevant to a subset of the content model.
 
 - **Section headings for grouped incoming/outgoing relationships** — Add visual section headings to group results by section or entry type within the References and Referenced by panels.
-
-- **Move element type pills outside anchor tags** — Reposition the element type pill markup so it sits outside the `<a>` element, improving accessibility and click-target semantics.
