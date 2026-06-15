@@ -61,6 +61,8 @@ return [
 
 - **Moved element type pills outside anchor tags** — Repositioned the element type pill markup so it sits after the closing `<a>` tag (within the outer flex container) across all three element list sections — outgoing, nested, and incoming — improving accessibility and click-target semantics without changing the visual layout.
 
+- **Section headings for grouped incoming/outgoing relationships** — Added section-name headings (Craft section, category group, or asset volume name) within the References and Referenced by panels. Elements are pre-sorted in PHP by section name so headings render correctly without duplication. Grouping is computed server-side via a `groupElementsBySection()` helper rather than relying on Twig variable tracking, which avoids scoping issues. Each outgoing section heading carries an info tooltip listing the field handles on the current element that contribute relations to that section, styled as monospace code chips to match Craft's own handle display. Section heading `min-height` is overridden in CSS to remove the default `.field` spacing. The show/hide JS automatically collapses section headings when all items in their group fall beyond the initial display limit.
+
 ### Planned
 
 - **Performance optimisations** — Further profiling and query reduction across the render path.
@@ -68,5 +70,3 @@ return [
 - **Hard limit on incoming and outgoing relationships** — Cap the total number of relations fetched from the database to prevent excessive load on entries with very large relation sets.
 
 - **Limit relations by section and entry type** — Add configuration to scope incoming/outgoing scans to specific sections or entry types, reducing unnecessary queries for entries that are only relevant to a subset of the content model.
-
-- **Section headings for grouped incoming/outgoing relationships** — Add visual section headings to group results by section or entry type within the References and Referenced by panels.

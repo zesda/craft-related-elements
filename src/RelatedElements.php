@@ -89,7 +89,8 @@ class RelatedElements extends Plugin
         $currentSiteHandle = Craft::$app->getSites()->getSiteById($currentSiteId)->handle;
 
         // Find outgoing relationships (elements this entry references)
-        $this->findOutgoingRelationships($element, $relatedTypes, $outgoingRelatedElements, $hasResults, $currentSiteHandle);
+        $outgoingFieldsBySectionName = [];
+        $this->findOutgoingRelationships($element, $relatedTypes, $outgoingRelatedElements, $hasResults, $currentSiteHandle, $outgoingFieldsBySectionName);
 
         // Find incoming relationships (elements that reference this entry)
         $this->findIncomingRelationships($element, $relatedTypes, $incomingRelatedElements, $hasResults, $currentSiteHandle);
@@ -117,12 +118,16 @@ class RelatedElements extends Plugin
             $elementType = 'tag';
         }
 
+        $outgoingGroups = $this->groupElementsBySection($outgoingRelatedElements);
+        $incomingGroups = $this->groupElementsBySection($incomingRelatedElements);
+
         return Craft::$app->getView()->renderTemplate(
             'related-elements/_element-sidebar',
             [
                 'hasResults' => $hasResults,
-                'outgoingRelatedElements' => $outgoingRelatedElements,
-                'incomingRelatedElements' => $incomingRelatedElements,
+                'outgoingGroups' => $outgoingGroups,
+                'outgoingFieldsBySectionName' => $outgoingFieldsBySectionName,
+                'incomingGroups' => $incomingGroups,
                 'nestedRelatedElements' => $nestedRelatedElements,
                 'initialLimit' => self::$settings->initialLimit,
                 'elementType' => $elementType,
@@ -131,7 +136,7 @@ class RelatedElements extends Plugin
         );
     }
 
-    private function findOutgoingRelationships(Element $element, array $relatedTypes, array &$outgoingRelatedElements, bool &$hasResults, string $currentSiteHandle): void
+    private function findOutgoingRelationships(Element $element, array $relatedTypes, array &$outgoingRelatedElements, bool &$hasResults, string $currentSiteHandle, array &$outgoingFieldsBySectionName = []): void
     {
         try {
             $fieldLayout = $element->getFieldLayout();
@@ -141,6 +146,7 @@ class RelatedElements extends Plugin
 
             $fields = $fieldLayout->getCustomFields();
             $seenIds = array_fill_keys(array_keys($relatedTypes), []);
+            $fallbackLabels = ['Entry' => 'Entries', 'Category' => 'Categories', 'Asset' => 'Assets', 'Tag' => 'Tags'];
 
             foreach ($fields as $field) {
                 if (!$field || !$field->handle || !($field instanceof BaseRelationField)) {
@@ -171,6 +177,14 @@ class RelatedElements extends Plugin
                                     $seenIds[$type][$relatedElement->id] = true;
                                     $outgoingRelatedElements[$type][] = $relatedElement;
                                     $hasResults = true;
+
+                                    $sectionName = $relatedElement->section->name
+                                        ?? $relatedElement->group->name
+                                        ?? $relatedElement->volume->name
+                                        ?? ($fallbackLabels[$type] ?? $type);
+                                    if (!in_array($field->handle, $outgoingFieldsBySectionName[$sectionName] ?? [], true)) {
+                                        $outgoingFieldsBySectionName[$sectionName][] = $field->handle;
+                                    }
                                 }
                                 break;
                             }
@@ -178,6 +192,17 @@ class RelatedElements extends Plugin
                     }
                 } catch (\Throwable $e) {
                     Craft::warning("Error processing field {$field->handle} for outgoing relationships: " . $e->getMessage(), __METHOD__);
+                }
+            }
+
+            foreach (array_keys($relatedTypes) as $type) {
+                if (!empty($outgoingRelatedElements[$type])) {
+                    usort($outgoingRelatedElements[$type], fn($a, $b) =>
+                        strcmp(
+                            ($a->section->name ?? $a->group->name ?? $a->volume->name ?? ''),
+                            ($b->section->name ?? $b->group->name ?? $b->volume->name ?? '')
+                        ) ?: strcmp($a->title ?? '', $b->title ?? '')
+                    );
                 }
             }
         } catch (\Throwable $e) {
@@ -209,10 +234,39 @@ class RelatedElements extends Plugin
                     $incomingRelatedElements[$type][] = $el;
                     $hasResults = true;
                 }
+
+                if (!empty($incomingRelatedElements[$type])) {
+                    usort($incomingRelatedElements[$type], fn($a, $b) =>
+                        strcmp(
+                            ($a->section->name ?? $a->group->name ?? $a->volume->name ?? ''),
+                            ($b->section->name ?? $b->group->name ?? $b->volume->name ?? '')
+                        ) ?: strcmp($a->title ?? '', $b->title ?? '')
+                    );
+                }
             }
         } catch (\Throwable $e) {
             Craft::error("Error finding incoming relationships: " . $e->getMessage(), __METHOD__);
         }
+    }
+
+    private function groupElementsBySection(array $typeElementMap): array
+    {
+        $groups = [];
+        foreach ($typeElementMap as $type => $elements) {
+            $currentSection = null;
+            foreach ($elements as $element) {
+                $sectionName = $element->section->name
+                    ?? $element->group->name
+                    ?? $element->volume->name
+                    ?? $type;
+                if ($sectionName !== $currentSection) {
+                    $currentSection = $sectionName;
+                    $groups[] = ['section' => $sectionName, 'type' => $type, 'elements' => []];
+                }
+                $groups[count($groups) - 1]['elements'][] = $element;
+            }
+        }
+        return $groups;
     }
 
     private function findNestedElements(array $fields, Element $element, array &$nestedRelatedElements, bool &$hasResults, array $relatedTypes, string $fieldPath = ''): void
