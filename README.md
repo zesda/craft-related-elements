@@ -50,3 +50,23 @@ return [
 - **enableNestedElements** (boolean, default: `true`) - Whether to display the related elements that exist inside the CKEditor, Matrix or Neo fields of an element.
 - **initialLimit** (integer, default: `10`) - Number of related elements to show initially before requiring "Show More" to expand the list.
 - **showElementTypeLabel** (boolean, default: `true`) - Whether to display the element type labels (Entry, Category, Asset, Tag) next to each related element.
+
+## Improvements
+
+### Completed
+
+- **Removed field-walking verification loop from `findIncomingRelationships()`** — The original code ran a `relatedTo` query to find candidate elements, then re-walked every field on every candidate calling `getFieldValue()` to confirm the relationship. This was the primary source of excess SQL queries. Craft's `relatedTo` query already reads the `craft_relations` table which is the authoritative source of truth written at save time, so the secondary verification pass was redundant.
+
+- **Removed duplication and dead code from `findOutgoingRelationships()`** — Replaced the O(n) linear scan for duplicate detection with an O(1) ID-keyed hash set. Removed the per-element `getFieldLayout()` guard call, which was unnecessary for standard element types (Entry, Category, Asset, Tag) returned by Craft's field value API.
+
+### Planned
+
+- **Performance optimisations** — Further profiling and query reduction across the render path.
+
+- **Hard limit on incoming and outgoing relationships** — Cap the total number of relations fetched from the database to prevent excessive load on entries with very large relation sets.
+
+- **Limit relations by section and entry type** — Add configuration to scope incoming/outgoing scans to specific sections or entry types, reducing unnecessary queries for entries that are only relevant to a subset of the content model.
+
+- **Section headings for grouped incoming/outgoing relationships** — Add visual section headings to group results by section or entry type within the References and Referenced by panels.
+
+- **Move element type pills outside anchor tags** — Reposition the element type pill markup so it sits outside the `<a>` element, improving accessibility and click-target semantics.
