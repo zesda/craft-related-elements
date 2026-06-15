@@ -48,5 +48,31 @@
     warning: configFileSettings.initialLimit is defined ? 'This setting is being overridden by the "initialLimit" setting in your related-elements.php config file.' : null,
     disabled: configFileSettings.initialLimit is defined,
   }) }}
+
+  {{ forms.textField({
+    label: 'Outgoing relationship limit',
+    instructions: 'Maximum number of outgoing relationships (elements this entry references) to load. Leave blank for no limit.',
+    name: 'outgoingLimit',
+    value: settings.outgoingLimit ?? '',
+    placeholder: 'No limit',
+    type: 'number',
+    min: 1,
+    size: 10,
+    warning: configFileSettings.outgoingLimit is defined ? 'This setting is being overridden by the "outgoingLimit" setting in your related-elements.php config file.' : null,
+    disabled: configFileSettings.outgoingLimit is defined,
+  }) }}
+
+  {{ forms.textField({
+    label: 'Incoming relationship limit',
+    instructions: 'Maximum number of incoming relationships (elements that reference this entry) to load. Leave blank for no limit.',
+    name: 'incomingLimit',
+    value: settings.incomingLimit ?? '',
+    placeholder: 'No limit',
+    type: 'number',
+    min: 1,
+    size: 10,
+    warning: configFileSettings.incomingLimit is defined ? 'This setting is being overridden by the "incomingLimit" setting in your related-elements.php config file.' : null,
+    disabled: configFileSettings.incomingLimit is defined,
+  }) }}
 </div>
 

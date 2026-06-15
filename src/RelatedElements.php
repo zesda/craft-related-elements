@@ -112,10 +112,12 @@ class RelatedElements extends Plugin
 
         // Find outgoing relationships (elements this entry references)
         $outgoingFieldsBySectionName = [];
-        $this->findOutgoingRelationships($element, $relatedTypes, $outgoingRelatedElements, $hasResults, $currentSiteHandle, $outgoingFieldsBySectionName);
+        $outgoingLimitHit = false;
+        $this->findOutgoingRelationships($element, $relatedTypes, $outgoingRelatedElements, $hasResults, $currentSiteHandle, $outgoingFieldsBySectionName, $outgoingLimitHit);
 
         // Find incoming relationships (elements that reference this entry)
-        $this->findIncomingRelationships($element, $relatedTypes, $incomingRelatedElements, $hasResults, $currentSiteHandle);
+        $incomingLimitHit = false;
+        $this->findIncomingRelationships($element, $relatedTypes, $incomingRelatedElements, $hasResults, $currentSiteHandle, $incomingLimitHit);
 
         if ($enableNestedElements) {
             $fieldLayout = $element->getFieldLayout();
@@ -149,7 +151,11 @@ class RelatedElements extends Plugin
                 'hasResults' => $hasResults,
                 'outgoingGroups' => $outgoingGroups,
                 'outgoingFieldsBySectionName' => $outgoingFieldsBySectionName,
+                'outgoingLimitHit' => $outgoingLimitHit,
+                'outgoingLimit' => self::$settings->outgoingLimit,
                 'incomingGroups' => $incomingGroups,
+                'incomingLimitHit' => $incomingLimitHit,
+                'incomingLimit' => self::$settings->incomingLimit,
                 'nestedRelatedElements' => $nestedRelatedElements,
                 'initialLimit' => self::$settings->initialLimit,
                 'elementType' => $elementType,
@@ -158,7 +164,7 @@ class RelatedElements extends Plugin
         );
     }
 
-    private function findOutgoingRelationships(Element $element, array $relatedTypes, array &$outgoingRelatedElements, bool &$hasResults, string $currentSiteHandle, array &$outgoingFieldsBySectionName = []): void
+    private function findOutgoingRelationships(Element $element, array $relatedTypes, array &$outgoingRelatedElements, bool &$hasResults, string $currentSiteHandle, array &$outgoingFieldsBySectionName = [], bool &$limitHit = false): void
     {
         try {
             $fieldLayout = $element->getFieldLayout();
@@ -169,10 +175,17 @@ class RelatedElements extends Plugin
             $fields = $fieldLayout->getCustomFields();
             $seenIds = array_fill_keys(array_keys($relatedTypes), []);
             $fallbackLabels = ['Entry' => 'Entries', 'Category' => 'Categories', 'Asset' => 'Assets', 'Tag' => 'Tags'];
+            $outgoingLimit = self::$settings->outgoingLimit;
+            $totalAdded = 0;
 
             foreach ($fields as $field) {
                 if (!$field || !$field->handle || !($field instanceof BaseRelationField)) {
                     continue;
+                }
+
+                if ($outgoingLimit && $totalAdded >= $outgoingLimit) {
+                    $limitHit = true;
+                    break;
                 }
 
                 try {
@@ -193,12 +206,18 @@ class RelatedElements extends Plugin
                     }
 
                     foreach ($relatedElements as $relatedElement) {
+                        if ($outgoingLimit && $totalAdded >= $outgoingLimit) {
+                            $limitHit = true;
+                            break;
+                        }
+
                         foreach ($relatedTypes as $type => $class) {
                             if ($relatedElement instanceof $class) {
                                 if (!isset($seenIds[$type][$relatedElement->id])) {
                                     $seenIds[$type][$relatedElement->id] = true;
                                     $outgoingRelatedElements[$type][] = $relatedElement;
                                     $hasResults = true;
+                                    $totalAdded++;
 
                                     $sectionName = $relatedElement->section->name
                                         ?? $relatedElement->group->name
@@ -232,12 +251,20 @@ class RelatedElements extends Plugin
         }
     }
 
-    private function findIncomingRelationships(Element $element, array $relatedTypes, array &$incomingRelatedElements, bool &$hasResults, string $currentSiteHandle): void
+    private function findIncomingRelationships(Element $element, array $relatedTypes, array &$incomingRelatedElements, bool &$hasResults, string $currentSiteHandle, bool &$limitHit = false): void
     {
         try {
             // relatedTo with targetElement queries craft_relations directly — results are already verified
+            $incomingLimit = self::$settings->incomingLimit;
+            $totalIncoming = 0;
+
             foreach ($relatedTypes as $type => $class) {
-                $elements = $class::find()
+                if ($incomingLimit && $totalIncoming >= $incomingLimit) {
+                    $limitHit = true;
+                    break;
+                }
+
+                $query = $class::find()
                     ->relatedTo([
                         'targetElement' => $element,
                         'field' => null,
@@ -246,8 +273,13 @@ class RelatedElements extends Plugin
                     ->site('*')
                     ->unique()
                     ->preferSites([$currentSiteHandle])
-                    ->orderBy('title')
-                    ->all();
+                    ->orderBy('title');
+
+                if ($incomingLimit) {
+                    $query->limit($incomingLimit - $totalIncoming);
+                }
+
+                $elements = $query->all();
 
                 foreach ($elements as $el) {
                     if ($el->id === $element->id) {
@@ -255,6 +287,11 @@ class RelatedElements extends Plugin
                     }
                     $incomingRelatedElements[$type][] = $el;
                     $hasResults = true;
+                    $totalIncoming++;
+                }
+
+                if ($incomingLimit && $totalIncoming >= $incomingLimit) {
+                    $limitHit = true;
                 }
 
                 if (!empty($incomingRelatedElements[$type])) {

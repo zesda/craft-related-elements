@@ -11,6 +11,9 @@
 .related-elements-sidebar .related-element-type-heading {
   min-height: 0;
 }
+.related-elements-sidebar .info-tooltip {
+  min-width: 200px;
+}
 </style>
 
 {# Macro for element type pill #}
@@ -92,19 +95,34 @@
 
       {% if hasOutgoingElements or hasNestedElements %}
         <div class="field relationship-section-header" style="padding-block: 8px; padding-inline: var(--m); background-color: var(--gray-050); border-radius: 4px; margin-bottom: 4px;">
-          <div class="flex flex-nowrap gap-s items-center">
-            <strong style="font-size: 14px; color: var(--gray-700);">References</strong>
-            <div style="position: relative; display: inline-block;">
-              <button type="button" class="info-icon-btn" style="background: none; border: none; padding: 2px; cursor: pointer; display: flex; align-items: center;" title="Show info">
-                <span class="cp-icon small" style="color: var(--gray-500); opacity: 0.7;">
-                  {{ iconSvg('info') }}
-                </span>
-              </button>
-              <div class="info-tooltip" style="display: none; position: absolute; background: var(--gray-900); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; z-index: 1000; white-space: nowrap; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;">
-                Elements this {{ elementType }} links to
-                <div style="position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid var(--gray-900);"></div>
+          <div class="flex flex-nowrap gap-s items-center" style="justify-content: space-between; width: 100%;">
+            <div class="flex flex-nowrap gap-s items-center">
+              <strong style="font-size: 14px; color: var(--gray-700);">References</strong>
+              <div style="position: relative; display: inline-block;">
+                <button type="button" class="info-icon-btn" style="background: none; border: none; padding: 2px; cursor: pointer; display: flex; align-items: center;" title="Show info">
+                  <span class="cp-icon small" style="color: var(--gray-500); opacity: 0.7;">
+                    {{ iconSvg('info') }}
+                  </span>
+                </button>
+                <div class="info-tooltip" style="display: none; position: absolute; background: var(--gray-900); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; z-index: 1000; white-space: nowrap; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;">
+                  Elements this {{ elementType }} links to
+                  <div style="position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid var(--gray-900);"></div>
+                </div>
               </div>
             </div>
+            {% if outgoingLimitHit %}
+              <div style="position: relative; display: inline-block;">
+                <button type="button" class="info-icon-btn" style="background: none; border: none; padding: 2px; cursor: pointer; display: flex; align-items: center;">
+                  <span class="cp-icon small" style="--icon-color: #ea580c; color: #ea580c;">
+                    {{ iconSvg('alert') }}
+                  </span>
+                </button>
+                <div class="info-tooltip" style="display: none; position: absolute; background: var(--gray-900); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; z-index: 1000; white-space: nowrap; top: 100%; right: 0; margin-top: 4px; max-width: 300px; white-space: normal;">
+                  Results limited to {{ outgoingLimit }} outgoing relationship{{ outgoingLimit != 1 ? 's' }}. There may be more not shown.
+                  <div style="position: absolute; top: -4px; right: 6px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid var(--gray-900);"></div>
+                </div>
+              </div>
+            {% endif %}
           </div>
         </div>
 
@@ -236,19 +254,34 @@
         {% endif %}
 
         <div class="field relationship-section-header" style="padding-block: 8px; padding-inline: var(--m); background-color: var(--gray-050); border-radius: 4px; margin-bottom: 4px;">
-          <div class="flex flex-nowrap gap-s items-center">
-            <strong style="font-size: 14px; color: var(--gray-700);">Referenced by</strong>
-            <div style="position: relative; display: inline-block;">
-              <button type="button" class="info-icon-btn" style="background: none; border: none; padding: 2px; cursor: pointer; display: flex; align-items: center;" title="Show info">
-                <span class="cp-icon small" style="color: var(--gray-500); opacity: 0.7;">
-                  {{ iconSvg('info') }}
-                </span>
-              </button>
-              <div class="info-tooltip" style="display: none; position: absolute; background: var(--gray-900); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; z-index: 1000; white-space: nowrap; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;">
-                Elements that link to this {{ elementType }}
-                <div style="position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid var(--gray-900);"></div>
+          <div class="flex flex-nowrap gap-s items-center" style="justify-content: space-between; width: 100%;">
+            <div class="flex flex-nowrap gap-s items-center">
+              <strong style="font-size: 14px; color: var(--gray-700);">Referenced by</strong>
+              <div style="position: relative; display: inline-block;">
+                <button type="button" class="info-icon-btn" style="background: none; border: none; padding: 2px; cursor: pointer; display: flex; align-items: center;" title="Show info">
+                  <span class="cp-icon small" style="color: var(--gray-500); opacity: 0.7;">
+                    {{ iconSvg('info') }}
+                  </span>
+                </button>
+                <div class="info-tooltip" style="display: none; position: absolute; background: var(--gray-900); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; z-index: 1000; white-space: nowrap; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;">
+                  Elements that link to this {{ elementType }}
+                  <div style="position: absolute; top: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid var(--gray-900);"></div>
+                </div>
               </div>
             </div>
+            {% if incomingLimitHit %}
+              <div style="position: relative; display: inline-block;">
+                <button type="button" class="info-icon-btn" style="background: none; border: none; padding: 2px; cursor: pointer; display: flex; align-items: center;">
+                  <span class="cp-icon small" style="--icon-color: #ea580c; color: #ea580c;">
+                    {{ iconSvg('alert') }}
+                  </span>
+                </button>
+                <div class="info-tooltip" style="display: none; position: absolute; background: var(--gray-900); color: white; padding: 8px 12px; border-radius: 4px; font-size: 11px; z-index: 1000; top: 100%; right: 0; margin-top: 4px; max-width: 300px; white-space: normal;">
+                  Results limited to {{ incomingLimit }} incoming relationship{{ incomingLimit != 1 ? 's' }}. There may be more not shown.
+                  <div style="position: absolute; top: -4px; right: 6px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 4px solid var(--gray-900);"></div>
+                </div>
+              </div>
+            {% endif %}
           </div>
         </div>
 
