@@ -45,6 +45,7 @@ return [
     'showElementTypeLabel' => true,
     'outgoingLimit' => null, // null for no limit
     'incomingLimit' => null, // null for no limit
+    'allowedSections' => [], // empty array for all sections
 ];
 ```
 
@@ -56,6 +57,7 @@ return [
 - **showElementTypeLabel** (boolean, default: `true`) - Whether to display the element type labels (Entry, Category, Asset, Tag) next to each related element.
 - **outgoingLimit** (integer|null, default: `null`) - Maximum number of outgoing relationships (elements this entry references) to load. `null` for no limit.
 - **incomingLimit** (integer|null, default: `null`) - Maximum number of incoming relationships (elements that reference this entry) to load. The limit is applied at the database query level per element type and as a global total cap. `null` for no limit.
+- **allowedSections** (array, default: `[]`) - Restrict the sidebar to entries belonging to the specified section handles. An empty array shows the sidebar for all sections. Non-entry elements (categories, assets, tags) are always shown regardless of this setting.
 
 ## Improvements
 
@@ -75,6 +77,8 @@ return [
   - **Render-level HTML caching** — Wrapped the entire sidebar computation in Craft's data cache, keyed on `elementId` and `siteId`, with a `TagDependency` on the `related-elements` tag. Cache is invalidated automatically whenever any element is saved or deleted by listening to `Element::EVENT_AFTER_SAVE` and `Element::EVENT_AFTER_DELETE`. On repeat views of the same entry all database queries are bypassed entirely.
   - **O(1) deduplication in `findNestedElements()`** — The nested element traversal (Matrix, Neo, CKEditor) was using a nested `foreach` to check for duplicate element IDs — an O(n) scan per element added, growing quadratic with block count. Replaced with the same O(1) ID-keyed storage approach already used in `findOutgoingRelationships()`, storing elements keyed by their ID in the `$nestedRelatedElements` map rather than appending to a sequential array.
 
+- **Restrict sidebar by section** — Added `allowedSections` setting (array of section handles). When non-empty, the sidebar exits immediately for entries not in the specified sections — before any cache lookup or database queries. Non-entry elements (categories, assets, tags) are always shown. Configurable in the CP settings page and via `config/related-elements.php`.
+
 ### Planned
 
 - **Performance optimisations** — Further query and CPU reduction opportunities remaining in the render path:
@@ -82,5 +86,3 @@ return [
   - **Single `craft_relations` query for outgoing relationships** — `findOutgoingRelationships()` currently walks every custom field on the element layout, filters for relation field instances, and calls `getFieldValue()` for each. A single raw query on `craft_relations WHERE sourceId = :id` would return all outgoing relations in one shot — the same shortcut already applied to the incoming path — with `getFieldById()` (cached internally by Craft) to resolve field handles per distinct `fieldId`.
   - **Matrix block batching in `findNestedElements()`** — When nested elements are enabled, the traversal fires `n_blocks × n_types` queries — one `relatedTo($block)` per block per element type. Collecting all blocks for a field first and running `relatedTo(['or', ...$blocks])` once per type would reduce this to `n_types` queries per field regardless of block count.
   - **`getSiteById()` redundant call** — `renderTemplate()` calls `getSiteById()` to resolve the current site handle, and `findNestedElements()` calls it again independently. The handle could be passed as a parameter to avoid the duplicate lookup.
-
-- **Limit relations by section and entry type** — Add configuration to scope incoming/outgoing scans to specific sections or entry types, reducing unnecessary queries for entries that are only relevant to a subset of the content model.

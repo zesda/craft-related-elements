@@ -68,6 +68,10 @@ class RelatedElements extends Plugin
 
     private function renderTemplate(Element $element): string
     {
+        if (!$this->elementIsAllowed($element)) {
+            return '';
+        }
+
         if (!self::$settings->enableTemplateCache) {
             return $this->buildSidebarHtml($element);
         }
@@ -81,6 +85,21 @@ class RelatedElements extends Plugin
             null,
             $dependency
         );
+    }
+
+    private function elementIsAllowed(Element $element): bool
+    {
+        if (!($element instanceof Entry)) {
+            return true;
+        }
+
+        $allowedSections = self::$settings->allowedSections;
+
+        if (empty($allowedSections)) {
+            return true;
+        }
+
+        return in_array($element->section->handle ?? '', $allowedSections, true);
     }
 
     private function buildSidebarHtml(Element $element): string

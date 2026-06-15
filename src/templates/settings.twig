@@ -74,5 +74,22 @@
     warning: configFileSettings.incomingLimit is defined ? 'This setting is being overridden by the "incomingLimit" setting in your related-elements.php config file.' : null,
     disabled: configFileSettings.incomingLimit is defined,
   }) }}
+
+  {% set allowedSections = settings.allowedSections ?? [] %}
+  {% set configOverride = configFileSettings.allowedSections is defined %}
+  {% set sectionOptions = craft.app.entries.allSections | map(s => {label: s.name ~ ' (' ~ s.handle ~ ')', value: s.handle}) %}
+
+  <input type="hidden" name="allowedSections" value="">
+
+  {{ forms.checkboxSelectField({
+    label: 'Allowed sections',
+    instructions: 'Restrict the sidebar to entries in these sections only. Select "All" to show for every section.',
+    name: 'allowedSections',
+    options: sectionOptions,
+    values: allowedSections | length == 0 ? '*' : allowedSections,
+    showAllOption: true,
+    warning: configOverride ? 'This setting is being overridden by the "allowedSections" setting in your related-elements.php config file.' : null,
+    disabled: configOverride,
+  }) }}
 </div>
 
