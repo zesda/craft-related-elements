@@ -68,6 +68,10 @@ class RelatedElements extends Plugin
 
     private function renderTemplate(Element $element): string
     {
+        if (!self::$settings->enableTemplateCache) {
+            return $this->buildSidebarHtml($element);
+        }
+
         $cacheKey = "related-elements-sidebar-{$element->id}-{$element->siteId}";
         $dependency = new TagDependency(['tags' => ['related-elements']]);
 

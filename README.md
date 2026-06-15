@@ -40,6 +40,7 @@ Configure options in the control panel under Settings → Related Elements or cr
 
 return [
     'enableNestedElements' => true,
+    'enableTemplateCache' => false,
     'initialLimit' => 10,
     'showElementTypeLabel' => true,
 ];
@@ -48,6 +49,7 @@ return [
 ### Settings
 
 - **enableNestedElements** (boolean, default: `true`) - Whether to display the related elements that exist inside the CKEditor, Matrix or Neo fields of an element.
+- **enableTemplateCache** (boolean, default: `false`) - Cache the sidebar HTML per element and site, invalidated automatically on element save or delete. Disabled by default; enable when repeat CP views of the same entry are common and Craft's data cache is properly configured.
 - **initialLimit** (integer, default: `10`) - Number of related elements to show initially before requiring "Show More" to expand the list.
 - **showElementTypeLabel** (boolean, default: `true`) - Whether to display the element type labels (Entry, Category, Asset, Tag) next to each related element.
 

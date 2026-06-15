@@ -5,6 +5,17 @@
 
 <div>
   {{ forms.lightswitchField({
+    label: 'Enable template caching',
+    instructions: 'Cache the sidebar HTML per element. Improves performance on repeat views but may serve stale results if Craft\'s data cache is not configured correctly.',
+    name: 'enableTemplateCache',
+    value: settings.enableTemplateCache,
+    on: (settings.enableTemplateCache is defined) ? settings.enableTemplateCache : '',
+    class: 'first',
+    warning: configFileSettings.enableTemplateCache is defined ? 'This setting is being overridden by the "enableTemplateCache" setting in your related-elements.php config file.' : null,
+    disabled: configFileSettings.enableTemplateCache is defined,
+  }) }}
+
+  {{ forms.lightswitchField({
     label: 'Display nested related elements',
     instructions: 'Whether to display the related elements that exist inside the CKEditor, Matrix or Neo fields of an element.',
     name: 'enableNestedElements',
