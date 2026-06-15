@@ -15,6 +15,7 @@ use craft\fields\BaseRelationField;
 use craft\fields\Matrix;
 use mindseekermedia\craftrelatedelements\models\Settings;
 use yii\base\Event;
+use yii\caching\TagDependency;
 
 /**
  * Related Elements plugin
@@ -59,9 +60,26 @@ class RelatedElements extends Plugin
                     ? $this->renderTemplate($event->sender)
                     : ''
         );
+
+        $invalidate = fn() => TagDependency::invalidate(Craft::$app->getCache(), 'related-elements');
+        Event::on(Element::class, Element::EVENT_AFTER_SAVE, $invalidate);
+        Event::on(Element::class, Element::EVENT_AFTER_DELETE, $invalidate);
     }
 
     private function renderTemplate(Element $element): string
+    {
+        $cacheKey = "related-elements-sidebar-{$element->id}-{$element->siteId}";
+        $dependency = new TagDependency(['tags' => ['related-elements']]);
+
+        return Craft::$app->getCache()->getOrSet(
+            $cacheKey,
+            fn() => $this->buildSidebarHtml($element),
+            null,
+            $dependency
+        );
+    }
+
+    private function buildSidebarHtml(Element $element): string
     {
         $relatedTypes = [
             'Entry' => Entry::class,
@@ -346,21 +364,9 @@ class RelatedElements extends Plugin
                                     });
 
                                     if (!empty($filteredElements)) {
-                                        if (!isset($nestedRelatedElements[$fieldName][$type])) {
-                                            $nestedRelatedElements[$fieldName][$type] = [];
-                                        }
-
                                         foreach ($filteredElements as $newElement) {
-                                            $exists = false;
-                                            foreach ($nestedRelatedElements[$fieldName][$type] as $existingElement) {
-                                                if ($existingElement->id === $newElement->id) {
-                                                    $exists = true;
-                                                    break;
-                                                }
-                                            }
-
-                                            if (!$exists) {
-                                                $nestedRelatedElements[$fieldName][$type][] = $newElement;
+                                            if (!isset($nestedRelatedElements[$fieldName][$type][$newElement->id])) {
+                                                $nestedRelatedElements[$fieldName][$type][$newElement->id] = $newElement;
                                                 $hasResults = true;
                                             }
                                         }
@@ -393,21 +399,8 @@ class RelatedElements extends Plugin
                                                                     if ($embeddedEntry instanceof $class) {
                                                                         try {
                                                                             if ($embeddedEntry->getFieldLayout() !== null) {
-                                                                                if (!isset($nestedRelatedElements[$fieldName][$type])) {
-                                                                                    $nestedRelatedElements[$fieldName][$type] = [];
-                                                                                }
-
-                                                                                // Check if element already exists to avoid duplicates
-                                                                                $exists = false;
-                                                                                foreach ($nestedRelatedElements[$fieldName][$type] as $existingElement) {
-                                                                                    if ($existingElement->id === $embeddedEntry->id) {
-                                                                                        $exists = true;
-                                                                                        break;
-                                                                                    }
-                                                                                }
-
-                                                                                if (!$exists) {
-                                                                                    $nestedRelatedElements[$fieldName][$type][] = $embeddedEntry;
+                                                                                if (!isset($nestedRelatedElements[$fieldName][$type][$embeddedEntry->id])) {
+                                                                                    $nestedRelatedElements[$fieldName][$type][$embeddedEntry->id] = $embeddedEntry;
                                                                                     $hasResults = true;
                                                                                 }
                                                                             }
@@ -474,21 +467,8 @@ class RelatedElements extends Plugin
                                             if ($embeddedEntry instanceof $class) {
                                                 try {
                                                     if ($embeddedEntry->getFieldLayout() !== null) {
-                                                        if (!isset($nestedRelatedElements[$fieldName][$type])) {
-                                                            $nestedRelatedElements[$fieldName][$type] = [];
-                                                        }
-
-                                                        // Check if element already exists to avoid duplicates
-                                                        $exists = false;
-                                                        foreach ($nestedRelatedElements[$fieldName][$type] as $existingElement) {
-                                                            if ($existingElement->id === $embeddedEntry->id) {
-                                                                $exists = true;
-                                                                break;
-                                                            }
-                                                        }
-
-                                                        if (!$exists) {
-                                                            $nestedRelatedElements[$fieldName][$type][] = $embeddedEntry;
+                                                        if (!isset($nestedRelatedElements[$fieldName][$type][$embeddedEntry->id])) {
+                                                            $nestedRelatedElements[$fieldName][$type][$embeddedEntry->id] = $embeddedEntry;
                                                             $hasResults = true;
                                                         }
                                                     }
