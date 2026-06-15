@@ -20,7 +20,7 @@ class Settings extends Model
             if (is_string($values['allowedSections'])) {
                 $values['allowedSections'] = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $values['allowedSections']))));
             } elseif (is_array($values['allowedSections'])) {
-                $values['allowedSections'] = array_values(array_filter(array_map('trim', $values['allowedSections'])));
+                $values['allowedSections'] = array_values(array_filter(array_map('trim', $values['allowedSections']), fn($v) => $v !== '' && $v !== '*'));
             }
         }
         parent::setAttributes($values, $safeOnly);

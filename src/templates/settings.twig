@@ -75,7 +75,7 @@
     disabled: configFileSettings.incomingLimit is defined,
   }) }}
 
-  {% set allowedSections = settings.allowedSections ?? [] %}
+  {% set allowedSections = (settings.allowedSections ?? []) | filter(v => v != '*') %}
   {% set configOverride = configFileSettings.allowedSections is defined %}
   {% set sectionOptions = craft.app.entries.allSections | map(s => {label: s.name ~ ' (' ~ s.handle ~ ')', value: s.handle}) %}
 
