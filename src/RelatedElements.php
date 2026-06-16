@@ -11,7 +11,7 @@ use craft\elements\Category;
 use craft\elements\Entry;
 use craft\elements\Tag;
 use craft\events\DefineHtmlEvent;
-use craft\fields\BaseRelationField;
+use craft\db\Query;
 use craft\fields\Matrix;
 use mindseekermedia\craftrelatedelements\models\Settings;
 use yii\base\Event;
@@ -186,76 +186,75 @@ class RelatedElements extends Plugin
     private function findOutgoingRelationships(Element $element, array $relatedTypes, array &$outgoingRelatedElements, bool &$hasResults, string $currentSiteHandle, array &$outgoingFieldsBySectionName = [], bool &$limitHit = false): void
     {
         try {
-            $fieldLayout = $element->getFieldLayout();
-            if (!$fieldLayout) {
+            // Single craft_relations query — same approach as findIncomingRelationships()
+            $rows = (new Query())
+                ->select(['fieldId', 'targetId'])
+                ->from('{{%relations}}')
+                ->where(['sourceId' => $element->id])
+                ->all();
+
+            if (empty($rows)) {
                 return;
             }
 
-            $fields = $fieldLayout->getCustomFields();
+            // Build targetId → [fieldIds] map; one element may appear across multiple fields
+            $targetFieldMap = [];
+            foreach ($rows as $row) {
+                $tid = (int) $row['targetId'];
+                $fid = (int) $row['fieldId'];
+                $targetFieldMap[$tid] ??= [];
+                if (!in_array($fid, $targetFieldMap[$tid], true)) {
+                    $targetFieldMap[$tid][] = $fid;
+                }
+            }
+
+            $allTargetIds = array_keys($targetFieldMap);
             $seenIds = array_fill_keys(array_keys($relatedTypes), []);
             $fallbackLabels = ['Entry' => 'Entries', 'Category' => 'Categories', 'Asset' => 'Assets', 'Tag' => 'Tags'];
             $outgoingLimit = self::$settings->outgoingLimit;
             $totalAdded = 0;
 
-            foreach ($fields as $field) {
-                if (!$field || !$field->handle || !($field instanceof BaseRelationField)) {
-                    continue;
-                }
-
+            foreach ($relatedTypes as $type => $class) {
                 if ($outgoingLimit && $totalAdded >= $outgoingLimit) {
                     $limitHit = true;
                     break;
                 }
 
-                try {
-                    $fieldValue = $element->getFieldValue($field->handle);
-                    if (!$fieldValue) {
+                $query = $class::find()
+                    ->id($allTargetIds)
+                    ->status(null)
+                    ->site('*')
+                    ->unique()
+                    ->preferSites([$currentSiteHandle]);
+
+                if ($outgoingLimit) {
+                    $query->limit($outgoingLimit - $totalAdded);
+                }
+
+                foreach ($query->all() as $el) {
+                    if ($el->id === $element->id || isset($seenIds[$type][$el->id])) {
                         continue;
                     }
 
-                    $relatedElements = [];
-                    if (is_iterable($fieldValue)) {
-                        foreach ($fieldValue as $relatedElement) {
-                            if ($relatedElement instanceof Element) {
-                                $relatedElements[] = $relatedElement;
-                            }
-                        }
-                    } elseif ($fieldValue instanceof Element) {
-                        $relatedElements[] = $fieldValue;
-                    }
+                    $seenIds[$type][$el->id] = true;
+                    $outgoingRelatedElements[$type][] = $el;
+                    $hasResults = true;
+                    $totalAdded++;
 
-                    foreach ($relatedElements as $relatedElement) {
-                        if ($outgoingLimit && $totalAdded >= $outgoingLimit) {
-                            $limitHit = true;
-                            break;
-                        }
-
-                        foreach ($relatedTypes as $type => $class) {
-                            if ($relatedElement instanceof $class) {
-                                if (!isset($seenIds[$type][$relatedElement->id])) {
-                                    $seenIds[$type][$relatedElement->id] = true;
-                                    $outgoingRelatedElements[$type][] = $relatedElement;
-                                    $hasResults = true;
-                                    $totalAdded++;
-
-                                    $sectionName = $relatedElement->section->name
-                                        ?? $relatedElement->group->name
-                                        ?? $relatedElement->volume->name
-                                        ?? ($fallbackLabels[$type] ?? $type);
-                                    if (!in_array($field->handle, $outgoingFieldsBySectionName[$sectionName] ?? [], true)) {
-                                        $outgoingFieldsBySectionName[$sectionName][] = $field->handle;
-                                    }
-                                }
-                                break;
-                            }
+                    $sectionName = $el->section->name ?? $el->group->name ?? $el->volume->name ?? ($fallbackLabels[$type] ?? $type);
+                    foreach ($targetFieldMap[$el->id] ?? [] as $fieldId) {
+                        $field = Craft::$app->getFields()->getFieldById($fieldId);
+                        if ($field && $field->handle && !in_array($field->handle, $outgoingFieldsBySectionName[$sectionName] ?? [], true)) {
+                            $outgoingFieldsBySectionName[$sectionName][] = $field->handle;
                         }
                     }
-                } catch (\Throwable $e) {
-                    Craft::warning("Error processing field {$field->handle} for outgoing relationships: " . $e->getMessage(), __METHOD__);
+
+                    if ($outgoingLimit && $totalAdded >= $outgoingLimit) {
+                        $limitHit = true;
+                        break;
+                    }
                 }
-            }
 
-            foreach (array_keys($relatedTypes) as $type) {
                 if (!empty($outgoingRelatedElements[$type])) {
                     usort($outgoingRelatedElements[$type], fn($a, $b) =>
                         strcmp(
