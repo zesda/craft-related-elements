@@ -4,6 +4,16 @@ Displays related elements of an entry, category or asset in the control panel ed
 
 <img src="screenshot.png" alt="Screenshot" width="500">
 
+## Features
+
+- **Three relationship panels** — *References* (elements this entry links to via its own fields), *Referenced by* (elements that link to this entry), and one panel per Matrix/Neo/CKEditor field listing elements nested inside that field.
+- **Section groupings** — elements in each panel are grouped under their Craft section, category group, or asset volume name, with a heading for each group.
+- **Field handle chips** — each outgoing section heading carries a tooltip listing the field handles on the current element that contribute relations to that group.
+- **Show more / collapse** — only `initialLimit` elements are shown initially; a "Show N more" button reveals the remainder without a page reload. Section headings are hidden when all items in their group are beyond the initial limit.
+- **Limit-hit indicator** — when `incomingLimit` or `outgoingLimit` is reached, an alert icon appears in the panel header with a tooltip explaining the cap.
+- **Element type labels** — optional pill labels (Entry, Category, Asset, Tag) shown next to each element; toggled via `showElementTypeLabel`.
+- **Section filtering** — the sidebar can be restricted to specific entry sections via `allowedSections`; the check runs before any cache or database work.
+
 ## Requirements
 
 This plugin requires Craft CMS 5.0.0 or later, and PHP 8.2 or later.
