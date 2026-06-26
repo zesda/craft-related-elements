@@ -145,7 +145,8 @@ class RelatedElements extends Plugin
                 $element,
                 $nestedRelatedElements,
                 $hasResults,
-                $relatedTypes
+                $relatedTypes,
+                $currentSiteHandle
             );
         }
 
@@ -241,7 +242,7 @@ class RelatedElements extends Plugin
                     $hasResults = true;
                     $totalAdded++;
 
-                    $sectionName = $el->section->name ?? $el->group->name ?? $el->volume->name ?? ($fallbackLabels[$type] ?? $type);
+                    $sectionName = $this->sectionLabel($el, $fallbackLabels[$type] ?? $type);
                     foreach ($targetFieldMap[$el->id] ?? [] as $fieldId) {
                         $field = Craft::$app->getFields()->getFieldById($fieldId);
                         if ($field && $field->handle && !in_array($field->handle, $outgoingFieldsBySectionName[$sectionName] ?? [], true)) {
@@ -256,12 +257,13 @@ class RelatedElements extends Plugin
                 }
 
                 if (!empty($outgoingRelatedElements[$type])) {
-                    usort($outgoingRelatedElements[$type], fn($a, $b) =>
-                        strcmp(
-                            ($a->section->name ?? $a->group->name ?? $a->volume->name ?? ''),
-                            ($b->section->name ?? $b->group->name ?? $b->volume->name ?? '')
-                        ) ?: strcmp($a->title ?? '', $b->title ?? '')
+                    // Schwartzian transform: compute sort keys once per element
+                    $keyed = array_map(
+                        fn($el) => [$this->sectionLabel($el, $type), $el->title ?? '', $el],
+                        $outgoingRelatedElements[$type]
                     );
+                    usort($keyed, fn($a, $b) => strcmp($a[0], $b[0]) ?: strcmp($a[1], $b[1]));
+                    $outgoingRelatedElements[$type] = array_column($keyed, 2);
                 }
             }
         } catch (\Throwable $e) {
@@ -313,17 +315,23 @@ class RelatedElements extends Plugin
                 }
 
                 if (!empty($incomingRelatedElements[$type])) {
-                    usort($incomingRelatedElements[$type], fn($a, $b) =>
-                        strcmp(
-                            ($a->section->name ?? $a->group->name ?? $a->volume->name ?? ''),
-                            ($b->section->name ?? $b->group->name ?? $b->volume->name ?? '')
-                        ) ?: strcmp($a->title ?? '', $b->title ?? '')
+                    // Schwartzian transform: compute sort keys once per element
+                    $keyed = array_map(
+                        fn($el) => [$this->sectionLabel($el, $type), $el->title ?? '', $el],
+                        $incomingRelatedElements[$type]
                     );
+                    usort($keyed, fn($a, $b) => strcmp($a[0], $b[0]) ?: strcmp($a[1], $b[1]));
+                    $incomingRelatedElements[$type] = array_column($keyed, 2);
                 }
             }
         } catch (\Throwable $e) {
             Craft::error("Error finding incoming relationships: " . $e->getMessage(), __METHOD__);
         }
+    }
+
+    private function sectionLabel(mixed $el, string $typeFallback): string
+    {
+        return $el->section->name ?? $el->group->name ?? $el->volume->name ?? $typeFallback;
     }
 
     private function groupElementsBySection(array $typeElementMap): array
@@ -332,10 +340,7 @@ class RelatedElements extends Plugin
         foreach ($typeElementMap as $type => $elements) {
             $currentSection = null;
             foreach ($elements as $element) {
-                $sectionName = $element->section->name
-                    ?? $element->group->name
-                    ?? $element->volume->name
-                    ?? $type;
+                $sectionName = $this->sectionLabel($element, $type);
                 if ($sectionName !== $currentSection) {
                     $currentSection = $sectionName;
                     $groups[] = ['section' => $sectionName, 'type' => $type, 'elements' => []];
@@ -346,22 +351,13 @@ class RelatedElements extends Plugin
         return $groups;
     }
 
-    private function findNestedElements(array $fields, Element $element, array &$nestedRelatedElements, bool &$hasResults, array $relatedTypes, string $fieldPath = ''): void
+    private function findNestedElements(array $fields, Element $element, array &$nestedRelatedElements, bool &$hasResults, array $relatedTypes, string $currentSiteHandle, string $fieldPath = ''): void
     {
         if (!$element || !$element->siteId) {
             return;
         }
 
         try {
-            $currentSiteId = $element->siteId;
-            $currentSite = Craft::$app->getSites()->getSiteById($currentSiteId);
-
-            if (!$currentSite) {
-                return;
-            }
-
-            $currentSiteHandle = $currentSite->handle;
-
             foreach ($fields as $field) {
                 if (!$field || !$field->handle) {
                     continue;
@@ -385,27 +381,37 @@ class RelatedElements extends Plugin
                             $nestedRelatedElements[$fieldName] = [];
                         }
 
+                        // Validate blocks once; $validBlocks is used for both the batch query and per-block recursion
+                        $validBlocks = [];
                         foreach ($blocks->all() as $block) {
                             if (!$block) {
                                 continue;
                             }
-
                             try {
-                                $fieldLayout = $block->getFieldLayout();
-                                if (!$fieldLayout) {
+                                if (!$block->getFieldLayout()) {
                                     continue;
                                 }
-
-                                // For Neo blocks, ensure they have a valid type
-                                if ($isNeoField && $block instanceof \benf\neo\elements\Block) {
+                                if ($isNeoField && class_exists('\benf\neo\elements\Block') && $block instanceof \benf\neo\elements\Block) {
                                     if (!$block->getType()) {
                                         continue;
                                     }
                                 }
+                                $validBlocks[] = $block;
+                            } catch (\Throwable $e) {
+                                Craft::warning('Error validating block: ' . $e->getMessage(), __METHOD__);
+                            }
+                        }
 
-                                foreach ($relatedTypes as $type => $class) {
+                        if (!empty($validBlocks)) {
+                            // Batch: one relatedTo query per type across all blocks in this field
+                            $relatedToArgs = count($validBlocks) === 1
+                                ? $validBlocks[0]
+                                : array_merge(['or'], $validBlocks);
+
+                            foreach ($relatedTypes as $type => $class) {
+                                try {
                                     $newElements = $class::find()
-                                        ->relatedTo($block)
+                                        ->relatedTo($relatedToArgs)
                                         ->status(null)
                                         ->site('*')
                                         ->unique()
@@ -413,47 +419,49 @@ class RelatedElements extends Plugin
                                         ->orderBy('title')
                                         ->all();
 
-                                    $filteredElements = array_filter($newElements, function($el) {
-                                        try {
-                                            return $el->getFieldLayout() !== null;
-                                        } catch (\Throwable $e) {
-                                            Craft::error("Error checking nested element layout {$el->id}: " . $e->getMessage(), __METHOD__);
-                                            return false;
-                                        }
-                                    });
-
-                                    if (!empty($filteredElements)) {
-                                        foreach ($filteredElements as $newElement) {
-                                            if (!isset($nestedRelatedElements[$fieldName][$type][$newElement->id])) {
-                                                $nestedRelatedElements[$fieldName][$type][$newElement->id] = $newElement;
-                                                $hasResults = true;
+                                    foreach ($newElements as $newElement) {
+                                        if (!isset($nestedRelatedElements[$fieldName][$type][$newElement->id])) {
+                                            try {
+                                                if ($newElement->getFieldLayout() !== null) {
+                                                    $nestedRelatedElements[$fieldName][$type][$newElement->id] = $newElement;
+                                                    $hasResults = true;
+                                                }
+                                            } catch (\Throwable $e) {
+                                                Craft::error("Error checking nested element layout {$newElement->id}: " . $e->getMessage(), __METHOD__);
                                             }
                                         }
                                     }
+                                } catch (\Throwable $e) {
+                                    Craft::warning("Error in batched relatedTo query for type {$type}: " . $e->getMessage(), __METHOD__);
                                 }
+                            }
 
-                                // Recursively check for nested Matrix/Neo fields within this block
-                                $blockFields = $fieldLayout->getCustomFields();
-                                if (!empty($blockFields)) {
-                                    // Also check for CKEditor fields within this block that might contain embedded entries
+                            // Per-block: process CKEditor fields and recurse into nested Matrix/Neo fields
+                            foreach ($validBlocks as $block) {
+                                try {
+                                    $blockFieldLayout = $block->getFieldLayout();
+                                    $blockFields = $blockFieldLayout->getCustomFields();
+
+                                    if (empty($blockFields)) {
+                                        continue;
+                                    }
+
                                     foreach ($blockFields as $blockField) {
                                         if (!$blockField || !$blockField->handle) {
                                             continue;
                                         }
 
-                                        $isCKEditorField = class_exists('\craft\ckeditor\Field') && $blockField instanceof \craft\ckeditor\Field;
+                                        $isCKEditorBlockField = class_exists('\craft\ckeditor\Field') && $blockField instanceof \craft\ckeditor\Field;
 
-                                        if ($isCKEditorField) {
+                                        if ($isCKEditorBlockField) {
                                             try {
                                                 $ckeditorFieldValue = $block->getFieldValue($blockField->handle);
 
                                                 if ($ckeditorFieldValue && is_iterable($ckeditorFieldValue)) {
                                                     foreach ($ckeditorFieldValue as $chunk) {
-                                                        // Check if this chunk is an entry type (embedded entry)
                                                         if (isset($chunk->type) && $chunk->type === 'entry' && isset($chunk->entry)) {
                                                             $embeddedEntry = $chunk->entry;
                                                             if ($embeddedEntry instanceof Element) {
-                                                                // Categorize the embedded entry by type
                                                                 foreach ($relatedTypes as $type => $class) {
                                                                     if ($embeddedEntry instanceof $class) {
                                                                         try {
@@ -486,17 +494,16 @@ class RelatedElements extends Plugin
                                         $nestedRelatedElements,
                                         $hasResults,
                                         $relatedTypes,
+                                        $currentSiteHandle,
                                         $fieldName
                                     );
+                                } catch (\Throwable $e) {
+                                    Craft::warning('Error processing block in Related Elements plugin: ' . $e->getMessage(), __METHOD__);
+                                    continue;
                                 }
-                            } catch (\Throwable $e) {
-                                // Log the error but continue processing other blocks
-                                Craft::warning('Error processing block in Related Elements plugin: ' . $e->getMessage(), __METHOD__);
-                                continue;
                             }
                         }
                     } catch (\Throwable $e) {
-                        // Log the error but continue processing other fields
                         Craft::warning('Error processing field in Related Elements plugin: ' . $e->getMessage(), __METHOD__);
                         continue;
                     }
@@ -517,11 +524,9 @@ class RelatedElements extends Plugin
 
                         if (is_iterable($ckeditorFieldValue)) {
                             foreach ($ckeditorFieldValue as $chunk) {
-                                // Check if this chunk is an entry type (embedded entry)
                                 if (isset($chunk->type) && $chunk->type === 'entry' && isset($chunk->entry)) {
                                     $embeddedEntry = $chunk->entry;
                                     if ($embeddedEntry instanceof Element) {
-                                        // Categorize the embedded entry by type
                                         foreach ($relatedTypes as $type => $class) {
                                             if ($embeddedEntry instanceof $class) {
                                                 try {
@@ -542,14 +547,12 @@ class RelatedElements extends Plugin
                             }
                         }
                     } catch (\Throwable $e) {
-                        // Log the error but continue processing other fields
                         Craft::warning("Error processing CKEditor field {$field->handle}: " . $e->getMessage(), __METHOD__);
                         continue;
                     }
                 }
             }
         } catch (\Throwable $e) {
-            // Log the error but don't throw it
             Craft::error('Error in Related Elements plugin: ' . $e->getMessage(), __METHOD__);
         }
     }
